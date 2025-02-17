@@ -20,12 +20,20 @@ func (r *TransactionRepository) initTransactionTable() error {
 }
 
 func (r *TransactionRepository) CreateTransaction(transaction *model.Transaction) error {
-	_, err := r.db.Exec("INSERT INTO transactions (amount, user_id, merchant_name, timestamp) VALUES (?, ?, ?, ?)", transaction.Amount, transaction.UserID, transaction.MerchantName, transaction.Timestamp)
+	_, err := r.db.Exec("INSERT INTO transactions (id, amount, user_id, merchant_name, timestamp) VALUES ($1, $2, $3, $4, $5)", transaction.ID, transaction.Amount, transaction.UserID, transaction.MerchantName, transaction.Timestamp.AsTime().UTC())
 	return err
 }
 
 func (r *TransactionRepository) GetTransaction(id string) (*model.Transaction, error) {
 	var transaction model.Transaction
-	err := r.db.QueryRow("SELECT id, amount, user_id FROM transactions WHERE id = ?", id).Scan(&transaction.ID, &transaction.Amount, &transaction.UserID)
-	return &transaction, err
+	err := r.db.QueryRow("SELECT id, amount, user_id FROM transactions WHERE id = $1", id).Scan(&transaction.ID, &transaction.Amount, &transaction.UserID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &transaction, nil
 }

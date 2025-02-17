@@ -60,7 +60,7 @@ func ProcessTransactionCSVFile(filePath string, transactionService *service.Tran
 		}
 
 		transaction := model.Transaction{
-			ID:           uuid.New(),
+			ID:           uuid.Must(uuid.NewRandom()),
 			UserID:       userID,
 			Timestamp:    timestamppb.New(timestamp),
 			MerchantName: record[2],
@@ -70,8 +70,44 @@ func ProcessTransactionCSVFile(filePath string, transactionService *service.Tran
 		err = transactionService.ProcessTransaction(&transaction)
 		if err != nil {
 			fraudTransactions = append(fraudTransactions, transaction)
-			fmt.Printf("transaction %s: %v\n", transaction.ID, err)
 		}
 	}
+
+	fmt.Println("Fraud transactions:", len(fraudTransactions))
+
+	fmt.Println("Writing fraud transactions to fraud_transactions.csv")
+	// Create output CSV file for fraud transactions
+	outputFile, err := os.Create("fraud_transactions.csv")
+	if err != nil {
+		fmt.Println("Error creating output file:", err)
+		return
+	}
+	defer outputFile.Close()
+
+	writer := csv.NewWriter(outputFile)
+	defer writer.Flush()
+
+	// Write header
+	header := []string{"UserID", "Amount", "MerchantName", "Timestamp"}
+	if err := writer.Write(header); err != nil {
+		fmt.Println("Error writing header:", err)
+		return
+	}
+
+	// Write fraud transactions
+	for _, t := range fraudTransactions {
+		record := []string{
+			t.UserID.String(),
+			t.Amount.String(),
+			t.MerchantName,
+			t.Timestamp.AsTime().Format(time.RFC3339),
+		}
+		if err := writer.Write(record); err != nil {
+			fmt.Printf("Error writing record %v: %v\n", record, err)
+			continue
+		}
+	}
+
+	fmt.Printf("Wrote %d fraud transactions to fraud_transactions.csv\n", len(fraudTransactions))
 
 }

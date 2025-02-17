@@ -24,13 +24,13 @@ func (r *UserRepository) initUserTable() error {
 
 func (r *UserRepository) GetUser(id uuid.UUID) (*model.User, error) {
 	var user model.User
-	err := r.db.QueryRow("SELECT id FROM users WHERE id = ?", id).Scan(&user.ID)
+	err := r.db.QueryRow("SELECT id FROM users WHERE id = $1", id).Scan(&user.ID)
 	return &user, err
 }
 
 func (r *UserRepository) GetUserAverageTransactionAmount(userID uuid.UUID) (decimal.Decimal, error) {
 	var avg sql.NullString
-	err := r.db.QueryRow("SELECT AVG(amount) FROM transactions WHERE user_id = ?", userID).Scan(&avg)
+	err := r.db.QueryRow("SELECT AVG(amount) FROM transactions WHERE user_id = $1", userID).Scan(&avg)
 	if err != nil {
 		return decimal.Zero, err
 	}
@@ -44,12 +44,12 @@ func (r *UserRepository) GetUserAverageTransactionAmount(userID uuid.UUID) (deci
 
 func (r *UserRepository) GetUserTransactionCount(userID uuid.UUID) (int64, error) {
 	var count int64
-	err := r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE user_id = ?", userID).Scan(&count)
+	err := r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE user_id = $1", userID).Scan(&count)
 	return count, err
 }
 
 func (r *UserRepository) GetUserTransactionCountInTimeRange(userID uuid.UUID, startTime time.Time, endTime time.Time) (int64, error) {
 	var count int64
-	err := r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE user_id = ? AND timestamp BETWEEN ? AND ?", userID, startTime, endTime).Scan(&count)
+	err := r.db.QueryRow("SELECT COUNT(*) FROM transactions WHERE user_id = $1 AND timestamp BETWEEN $2 AND $3", userID, startTime, endTime).Scan(&count)
 	return count, err
 }
