@@ -19,7 +19,7 @@ type FraudDetectionRuleProcessorOne struct {
 	merchantRepo            *repository.MerchantRepository
 }
 
-// Rule 1: If the amount is 2x greater than or equal to user average tranactions, it is a fraud transaction
+// Rule 1: If the amount is 5x greater than or equal to user average tranactions, it is a fraud transaction
 func NewFraudDetectionRuleProcessorOne(db *sql.DB) *FraudDetectionRuleProcessorOne {
 	return &FraudDetectionRuleProcessorOne{
 		userAverageTransactions: make(map[uuid.UUID]decimal.Decimal),
@@ -30,24 +30,23 @@ func NewFraudDetectionRuleProcessorOne(db *sql.DB) *FraudDetectionRuleProcessorO
 }
 
 func (p *FraudDetectionRuleProcessorOne) IsFraud(transaction *model.Transaction) bool {
-	userAverageTransactions, ok := p.userAverageTransactions[transaction.UserID]
+	userAverageTransaction, ok := p.userAverageTransactions[transaction.UserID]
 
 	if !ok {
 		avg, err := p.userRepo.GetUserAverageTransactionAmount(transaction.UserID)
 		if err != nil {
-			log.Println("Error getting user average transaction amount", err)
+			log.Println("Error getting user average transaction amount", err, transaction)
 		}
 		p.userAverageTransactions[transaction.UserID] = avg
-		userAverageTransactions = avg
+		userAverageTransaction = avg
 	}
 
-	if transaction.Amount.GreaterThanOrEqual(userAverageTransactions.Mul(decimal.NewFromInt(2))) {
+	if !userAverageTransaction.IsZero() && transaction.Amount.GreaterThanOrEqual(userAverageTransaction.Mul(decimal.NewFromInt(5))) {
 		return true
 	}
 
-	p.transactionRepo.CreateTransaction(transaction)
-
 	merchant, err := p.merchantRepo.GetMerchantByName(transaction.MerchantName)
+
 	if err != nil {
 		log.Println("Error getting merchant", err)
 	}
@@ -82,14 +81,12 @@ func NewFraudDetectionRuleProcessorTwo(db *sql.DB) *FraudDetectionRuleProcessorT
 func (p *FraudDetectionRuleProcessorTwo) IsFraud(transaction *model.Transaction) bool {
 	userTransactionCountInTimeRange, err := p.userRepo.GetUserTransactionCountInTimeRange(transaction.UserID, transaction.Timestamp.AsTime().Add(-5*time.Minute), transaction.Timestamp.AsTime())
 	if err != nil {
-		return false
+		log.Println("Error getting user transaction count in time range", err)
 	}
 
 	if userTransactionCountInTimeRange > 5 {
 		return true
 	}
-
-	p.transactionRepo.CreateTransaction(transaction)
 
 	merchant, err := p.merchantRepo.GetMerchantByName(transaction.MerchantName)
 	if err != nil {
@@ -132,20 +129,9 @@ func (p *FraudDetectionRuleProcessorThree) IsFraud(transaction *model.Transactio
 		return true
 	}
 
-	p.transactionRepo.CreateTransaction(transaction)
-
-	merchant, err := p.merchantRepo.GetMerchantByName(transaction.MerchantName)
+	_, err = p.merchantRepo.GetMerchantByName(transaction.MerchantName)
 	if err != nil {
 		log.Println("Error getting merchant", err)
-	}
-
-	if merchant == nil {
-		merchant = &model.Merchant{
-			ID:         uuid.New(),
-			Name:       transaction.MerchantName,
-			IsHighRisk: false,
-		}
-		p.merchantRepo.CreateMerchant(merchant)
 	}
 
 	return false
@@ -167,7 +153,7 @@ func NewFraudDetectionProcessorFour(db *sql.DB) *FraudDetectionProcessorFour {
 }
 
 func (p *FraudDetectionProcessorFour) IsFraud(transaction *model.Transaction) bool {
-	merchant, err := p.merchantRepo.GetMerchant(transaction.MerchantName)
+	merchant, err := p.merchantRepo.GetMerchantByName(transaction.MerchantName)
 	if err != nil {
 		log.Println("Error getting merchant", err)
 	}
@@ -176,7 +162,7 @@ func (p *FraudDetectionProcessorFour) IsFraud(transaction *model.Transaction) bo
 		return true
 	}
 
-	transactionCount, err := p.merchantRepo.GetMerchantTransactionCount(transaction.MerchantName)
+	transactionCount, err := p.merchantRepo.GetMerchantTransactionCountByName(transaction.MerchantName)
 	if err != nil {
 		log.Println("Error getting merchant transaction count", err)
 	}
@@ -185,12 +171,10 @@ func (p *FraudDetectionProcessorFour) IsFraud(transaction *model.Transaction) bo
 		return true
 	}
 
-	p.transactionRepo.CreateTransaction(transaction)
-
 	return false
 }
 
-// Rule 5: if the merchant receive large amount that are 2 times of the average amount, it is a fraud transaction
+// Rule 5: if the merchant receive large amount that are 5 times of the average amount, it is a fraud transaction
 type FraudDetectionProcessorFive struct {
 	transactionRepo *repository.TransactionRepository
 	merchantRepo    *repository.MerchantRepository
@@ -204,21 +188,19 @@ func NewFraudDetectionProcessorFive(db *sql.DB) *FraudDetectionProcessorFive {
 }
 
 func (p *FraudDetectionProcessorFive) IsFraud(transaction *model.Transaction) bool {
-	merchantTransactionAverageAmount, err := p.merchantRepo.GetMerchantTransactionAverageAmount(transaction.MerchantName)
+	merchantTransactionAverageAmount, err := p.merchantRepo.GetMerchantTransactionAverageAmountByName(transaction.MerchantName)
 	if err != nil {
 		return false
 	}
 
-	if transaction.Amount.GreaterThanOrEqual(merchantTransactionAverageAmount.Mul(decimal.NewFromInt(2))) {
-		merchant, err := p.merchantRepo.GetMerchant(transaction.MerchantName)
+	if transaction.Amount.GreaterThanOrEqual(merchantTransactionAverageAmount.Mul(decimal.NewFromInt(5))) {
+		merchant, err := p.merchantRepo.GetMerchantByName(transaction.MerchantName)
 		if err != nil {
 			log.Println("Error getting merchant", err)
 		}
 		p.merchantRepo.UpdateMerchantAsHighRisk(merchant)
 		return true
 	}
-
-	p.transactionRepo.CreateTransaction(transaction)
 
 	return false
 }
