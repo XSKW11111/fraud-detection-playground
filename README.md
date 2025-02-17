@@ -1,4 +1,4 @@
-# atlas-fraud-detection
+# fraud-detection-playground
 
 ## How to run
 
